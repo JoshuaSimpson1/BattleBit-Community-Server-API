@@ -16,16 +16,37 @@ class Program
         listener.OnAPlayerKilledAnotherPlayer += OnPlayerKill;
         listener.OnSavePlayerStats += OnSavePlayerStats;
         listener.OnGetPlayerStats += OnGetPlayerStats;
+        listener.OnPlayerTypedMessage += OnPlayerTypedMessage;
         listener.Start(29294);//Port
         Thread.Sleep(-1);
     }
 
-    private static async Task<PlayerStats> OnGetPlayerStats(ulong arg1, PlayerStats officalStats) {
-        throw new NotImplementedException();
+    private static async Task OnPlayerTypedMessage(MyPlayer player, ChatChannel channel, string msg) {
+        if (msg.StartsWith("!")) {
+            string command = msg.Substring(1);
+            // Process the command here.
+        }
     }
 
-    private static async Task OnSavePlayerStats(ulong steamID, PlayerStats stats) {
-        diskStorage.SavePlayerStatsOf(steamID, stats);
+    private static async Task<PlayerStats> OnGetPlayerStats(ulong steamID, PlayerStats officialStats) {
+        PlayerStats playerStat = diskStorage.GetPlayerStatsOf(steamID).Result;
+        // If the player is not created yet, we will first pull off from the bb servers
+        if (playerStat == null) {
+            return officialStats;
+        }
+        // In the case the bb servers have a more updated version of a players stats this way you can
+        // progress on the server if you wish too but you aren't limited to my own servers
+        if ((playerStat.Progress.Rank < officialStats.Progress.Rank &&
+             playerStat.Progress.Prestige <= officialStats.Progress.Prestige)
+            || playerStat.Progress.Prestige < officialStats.Progress.Prestige) {
+            return officialStats;
+        }
+        return playerStat;
+    }
+
+    private static async Task OnSavePlayerStats(ulong steamID, PlayerStats stats) 
+    {
+        await diskStorage.SavePlayerStatsOf(steamID, stats);
     }
 
     private static async Task OnPlayerKill(MyPlayer killer, Vector3 killerPos, MyPlayer victim, Vector3 victimPos, string tool) {
@@ -34,6 +55,10 @@ class Program
         } else if(tool == Gadgets.SledgeHammer.Name || tool == Gadgets.SledgeHammerSkinA.Name || tool == Gadgets.SledgeHammerSkinB.Name 
             || tool == Gadgets.SledgeHammerSkinC.Name) {
             killer.GameServer.SayToChat(killer.Name + " just pwned " + victim.Name + " with a sledgehammer!");
+        }
+
+        if (killer.DoubleXP) {
+            diskStorage.GetPlayerStatsOf(killer.SteamID).Result.Progress.EXP += 200;
         }
     }
 
@@ -56,7 +81,6 @@ class Program
     }
     
 }
-class MyPlayer : Player
-{
-    
+class MyPlayer : Player {
+    public bool DoubleXP = false;
 }
