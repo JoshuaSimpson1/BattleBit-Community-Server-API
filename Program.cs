@@ -3,13 +3,14 @@ using BattleBitAPI.Common;
 using BattleBitAPI.Server;
 using BattleBitAPI.Storage;
 using System.Numerics;
+using CommunityServerAPI;
 
 class Program
 {
-    public static DiskStorage diskStorage;
+    public static DiskStorage DiskStorage;
     static void Main(string[] args)
     {
-        diskStorage = new DiskStorage("Players\\");
+        DiskStorage = new DiskStorage("Players\\");
         var listener = new ServerListener<MyPlayer>();
         listener.OnGameServerTick += OnGameServerTick;
         listener.OnPlayerSpawning += OnPlayerSpawning;
@@ -23,30 +24,38 @@ class Program
 
     private static async Task OnPlayerTypedMessage(MyPlayer player, ChatChannel channel, string msg) {
         if (msg.StartsWith("!")) {
+            // Remove the first character
             string command = msg.Substring(1);
-            // Process the command here.
+            command = command.ToLower();
+            string[] args = command.Split(" ");
+
+            if (DiskStorage == null) {
+                player.Message("Failed to find player data!");
+                return;
+            }
+            Commands.ProcessCommand(player, args[0], args);
         }
     }
 
     private static async Task<PlayerStats> OnGetPlayerStats(ulong steamID, PlayerStats officialStats) {
-        PlayerStats playerStat = diskStorage.GetPlayerStatsOf(steamID).Result;
+        PlayerStats playerStat = DiskStorage.GetPlayerStatsOf(steamID).Result;
         // If the player is not created yet, we will first pull off from the bb servers
         if (playerStat == null) {
-            return officialStats;
+            playerStat = officialStats;
         }
         // In the case the bb servers have a more updated version of a players stats this way you can
         // progress on the server if you wish too but you aren't limited to my own servers
         if ((playerStat.Progress.Rank < officialStats.Progress.Rank &&
              playerStat.Progress.Prestige <= officialStats.Progress.Prestige)
             || playerStat.Progress.Prestige < officialStats.Progress.Prestige) {
-            return officialStats;
+            playerStat = officialStats;
         }
         return playerStat;
     }
 
     private static async Task OnSavePlayerStats(ulong steamID, PlayerStats stats) 
     {
-        await diskStorage.SavePlayerStatsOf(steamID, stats);
+        await DiskStorage.SavePlayerStatsOf(steamID, stats);
     }
 
     private static async Task OnPlayerKill(MyPlayer killer, Vector3 killerPos, MyPlayer victim, Vector3 victimPos, string tool) {
@@ -56,17 +65,20 @@ class Program
             || tool == Gadgets.SledgeHammerSkinC.Name) {
             killer.GameServer.SayToChat(killer.Name + " just pwned " + victim.Name + " with a sledgehammer!");
         }
-
-        if (killer.DoubleXP) {
-            diskStorage.GetPlayerStatsOf(killer.SteamID).Result.Progress.EXP += 200;
+        // TODO: When the api is updated to also count headshots make this correct such that the xp given is actually
+        // (200 + 400) * 2
+        if (killer.DoubleXp) {
+            DiskStorage.GetPlayerStatsOf(killer.SteamID).Result.Progress.EXP += 200;
         }
     }
 
     private static async Task<PlayerSpawnRequest> OnPlayerSpawning(MyPlayer player, PlayerSpawnRequest request) {
-        if(request.Loadout.PrimaryWeapon.Tool == Weapons.KrissVector) {
-            // Do not allow the vector
-            player.Message("This server doesn't allow the vector, sorry you will have to get good.");
-            request.Loadout.PrimaryWeapon.Tool = Weapons.HoneyBadger;
+        PlayerStats playerStat = DiskStorage.GetPlayerStatsOf(player.SteamID).Result;
+        if(BannedWeapons.IsBanned(request.Loadout.PrimaryWeapon.Tool)) {
+            // Do not allow banned weapons
+            player.Message("This server currently doesn't allow the " + request.Loadout.PrimaryWeapon.Tool.Name +
+                           " you will just need to get good.");
+            request.Loadout.PrimaryWeapon.Tool = Weapons.M9;
         }
         return request;
     }
@@ -82,5 +94,5 @@ class Program
     
 }
 class MyPlayer : Player {
-    public bool DoubleXP = false;
+    public bool DoubleXp = false;
 }
