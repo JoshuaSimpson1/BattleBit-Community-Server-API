@@ -74,7 +74,7 @@ class Program
 
     private static async Task<PlayerSpawnRequest> OnPlayerSpawning(MyPlayer player, PlayerSpawnRequest request) {
         PlayerStats playerStat = DiskStorage.GetPlayerStatsOf(player.SteamID).Result;
-        if(BannedWeapons.IsBanned(request.Loadout.PrimaryWeapon.Tool)) {
+        if(BannedTools.IsBanned(request.Loadout.PrimaryWeapon.Tool)) {
             // Do not allow banned weapons
             player.Message("This server currently doesn't allow the " + request.Loadout.PrimaryWeapon.Tool.Name +
                            " you will just need to get good.");
